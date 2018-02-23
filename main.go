@@ -73,6 +73,19 @@ func main() {
 	}
 }
 
+type certTrust struct {
+	hash string
+
+	issuer *pkix.Name
+	modDate time.Time
+	serialNumber *big.Int
+	trustSettings map[string]string
+}
+func (c *certTrust) String() string {
+	return fmt.Sprintf(`hash=%v issuer=%q modDate=%q serialNumber=%d
+  trustSettings=%#v`, c.hash[:8], c.issuer, c.modDate, c.serialNumber, c.trustSettings)
+}
+
 func parse(where string) {
 	fmt.Printf("parsing %s\n", where)
 
@@ -86,28 +99,23 @@ func parse(where string) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%+#v\n", plist)
-	for i := range plist.Dict {
-		fmt.Println("key")
-		if plist.Dict[i].Key != nil {
-			for j := range plist.Dict[i].Key {
-				fmt.Printf("  %s\n", plist.Dict[i].Key[j].Text)
-			}
-		}
-		fmt.Println("dict")
 
+	var items []*certTrust
+	for i := range plist.Dict {
 		// <key>02FAF3E291435468607857694DF5E45B68851868</key>
 		// <dict>
 		//   ...
 		// </dict>
 		hashes := plist.Dict[i].Dict[0].Key
-		fmt.Printf("found %d hashes\n", len(hashes))
 
 		for j := range plist.Dict[i].Dict {
-			hash := hashes[j]
-			fmt.Printf("hash=%#v\n", hash.Text)
 			dict := plist.Dict[i].Dict[j].Dict
 			for k := range dict {
+				item := &certTrust{
+					hash: hashes[j].Text,
+					trustSettings: make(map[string]string, 0),
+				}
+				items = append(items, item)
 
 				// <key>issuerName</key>
 				// <data>
@@ -127,7 +135,8 @@ func parse(where string) {
 					if err == nil {
 						name.FillFromRDNSequence(&issuer)
 					}
-					fmt.Printf("Issuer: %s\n", name)
+					// fmt.Printf("Issuer: %s\n", name)
+					item.issuer = &name
 				}
 
 				// <key>modDate</key>
@@ -138,7 +147,8 @@ func parse(where string) {
 					if err != nil {
 						panic(err)
 					}
-					fmt.Printf("modDate: %v\n", t)
+					// fmt.Printf("modDate: %v\n", t)
+					item.modDate = t
 				}
 
 				// <key>serialNumber</key>
@@ -152,7 +162,8 @@ func parse(where string) {
 					serial := big.NewInt(0)
 					serial.SetBytes(data)
 
-					fmt.Printf("serialNumber: %v\n", serial)
+					// fmt.Printf("serialNumber: %v\n", serial)
+					item.serialNumber = serial
 				}
 
 				// <key>trustSettings</key>
@@ -169,7 +180,8 @@ func parse(where string) {
 						if key := dict[k].Array.Dict[l].Key[0].Text; key == "kSecTrustSettingsResult" {
 							if len(dict[k].Array.Dict) >= l+1 {
 								value := dict[k].Array.Dict[l].Integer[0].Text
-								fmt.Printf("%s = %v\n", key, value)
+								// fmt.Printf("%s = %v\n", key, value)
+								item.trustSettings[key] = value
 							}
 						}
 
@@ -177,15 +189,17 @@ func parse(where string) {
 							if key := dict[k].Array.Dict[l].Key[2].Text; key == "kSecTrustSettingsPolicyName" {
 								if len(dict[k].Array.Dict) >= l+1 {
 									value := dict[k].Array.Dict[l].String.Text
-									fmt.Printf("%s = %v\n", key, value)
+									// fmt.Printf("%s = %v\n", key, value)
+									item.trustSettings[key] = value
 								}
 							}
 						}
 					}
 				}
 
-				fmt.Printf("\n")
+				fmt.Printf("%s\n\n", item.String())
 			}
 		}
 	}
+	fmt.Printf("found %d items\n", len(items))
 }
