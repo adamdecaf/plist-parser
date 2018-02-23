@@ -24,51 +24,42 @@ var (
 	flagDirectory = flag.String("directory", "./examples/", "Directory of files to parse")
 )
 
-// Generated with github.com/gnewton/chidley
-//
-// chidley -X after2 >> main.go
-
-type ChiChidleyRoot314159 struct {
-	Chiplist *Chiplist `xml:"plist,omitempty" json:"plist,omitempty"`
+type plist struct {
+	Dict []*Dict `xml:"dict,omitempty"`
 }
 
-type Chiplist struct {
-	Attrversion string`xml:"version,attr"  json:",omitempty"`
-	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`
+type Dict struct {
+	Array *Array `xml:"array,omitempty"`
+	Data []*Data `xml:"data,omitempty"`
+	Date *Date `xml:"date,omitempty"`
+	Dict []*Dict `xml:"dict,omitempty"`
+	Integer []*Integer `xml:"integer,omitempty"`
+	Key []*Key `xml:"key,omitempty"`
+	String *String `xml:"string,omitempty"`
 }
 
-type Chidict struct {
-	Chiarray *Chiarray `xml:"array,omitempty" json:"array,omitempty"`
-	Chidata []*Chidata `xml:"data,omitempty" json:"data,omitempty"`
-	Chidate *Chidate `xml:"date,omitempty" json:"date,omitempty"`
-	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`
-	Chiinteger []*Chiinteger `xml:"integer,omitempty" json:"integer,omitempty"`
-	Chikey []*Chikey `xml:"key,omitempty" json:"key,omitempty"`
-	Chistring *Chistring `xml:"string,omitempty" json:"string,omitempty"`
+type Key struct {
+	Text string `xml:",chardata"`
 }
 
-type Chikey struct {
-	Text string `xml:",chardata" json:",omitempty"`
+type Data struct {
+	Text string `xml:",chardata"`
 }
 
-type Chidata struct {
-	Text string `xml:",chardata" json:",omitempty"`
+type Date struct {
+	Text string `xml:",chardata"`
 }
 
-type Chidate struct {
-	Text string `xml:",chardata" json:",omitempty"`
+type Array struct {
+	Dict []*Dict `xml:"dict,omitempty"`
 }
 
-type Chiarray struct {
-	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`
+type Integer struct {
+	Text string `xml:",chardata"`
 }
 
-type Chiinteger struct {
-	Text string `xml:",chardata" json:",omitempty"`
-}
-
-type Chistring struct {
-	Text string `xml:",chardata" json:",omitempty"`
+type String struct {
+	Text string `xml:",chardata"`
 }
 
 func main() {
@@ -90,17 +81,17 @@ func parse(where string) {
 		panic(err)
 	}
 
-	plist := Chiplist{}
+	plist := plist{}
 	err = xml.Unmarshal(bs, &plist)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("%+#v\n", plist)
-	for i := range plist.Chidict {
+	for i := range plist.Dict {
 		fmt.Println("key")
-		if plist.Chidict[i].Chikey != nil {
-			for j := range plist.Chidict[i].Chikey {
-				fmt.Printf("  %s\n", plist.Chidict[i].Chikey[j].Text)
+		if plist.Dict[i].Key != nil {
+			for j := range plist.Dict[i].Key {
+				fmt.Printf("  %s\n", plist.Dict[i].Key[j].Text)
 			}
 		}
 		fmt.Println("dict")
@@ -109,13 +100,13 @@ func parse(where string) {
 		// <dict>
 		//   ...
 		// </dict>
-		hashes := plist.Chidict[i].Chidict[0].Chikey
+		hashes := plist.Dict[i].Dict[0].Key
 		fmt.Printf("found %d hashes\n", len(hashes))
 
-		for j := range plist.Chidict[i].Chidict {
+		for j := range plist.Dict[i].Dict {
 			hash := hashes[j]
 			fmt.Printf("hash=%#v\n", hash.Text)
-			dict := plist.Chidict[i].Chidict[j].Chidict
+			dict := plist.Dict[i].Dict[j].Dict
 			for k := range dict {
 
 				// <key>issuerName</key>
@@ -124,8 +115,8 @@ func parse(where string) {
 				// MCQGA1UECxMdQWRkVHJ1c3QgRXh0ZXJuYWwgVFRQIE5ldHdvcmsx
 				// IjAgBgNVBAMTGUFkZFRydXN0IEV4dGVybmFsIENBIFJvb3Q=
 				// </data>
-				if dict[k].Chikey[0].Text == "issuerName" {
-					raw := whitespaceReplacer.Replace(nonContentRegex.ReplaceAllString(dict[k].Chidata[0].Text, ""))
+				if dict[k].Key[0].Text == "issuerName" {
+					raw := whitespaceReplacer.Replace(nonContentRegex.ReplaceAllString(dict[k].Data[0].Text, ""))
 					data, _ := base64.StdEncoding.DecodeString(raw)
 
 					// The issuerName's <data></data> block is only under asn1 encoding for the
@@ -141,8 +132,8 @@ func parse(where string) {
 
 				// <key>modDate</key>
 				// <date>2018-02-20T02:13:51Z</date>
-				if dict[k].Chikey[1].Text == "modDate" {
-					raw := dict[k].Chidate.Text // e.g. <date>2018-02-20T02:11:28Z</date>
+				if dict[k].Key[1].Text == "modDate" {
+					raw := dict[k].Date.Text // e.g. <date>2018-02-20T02:11:28Z</date>
 					t, err := time.ParseInLocation(plistModDateFormat, raw, time.UTC)
 					if err != nil {
 						panic(err)
@@ -154,8 +145,8 @@ func parse(where string) {
 				// <data>
 				// AQ==
 				// </data>
-				if dict[k].Chikey[2].Text == "serialNumber" {
-					raw := whitespaceReplacer.Replace(nonContentRegex.ReplaceAllString(dict[k].Chidata[1].Text, ""))
+				if dict[k].Key[2].Text == "serialNumber" {
+					raw := whitespaceReplacer.Replace(nonContentRegex.ReplaceAllString(dict[k].Data[1].Text, ""))
 					data, _ := base64.StdEncoding.DecodeString(raw)
 
 					serial := big.NewInt(0)
@@ -172,21 +163,20 @@ func parse(where string) {
 				//     </dict>
 				// </array>
 				if len(dict) > k &&
-					len(dict[k].Chikey) > 3 &&
-					dict[k].Chikey[3].Text == "trustSettings" {
-					for l := range dict[k].Chiarray.Chidict {
-						// fmt.Println(dict[k].Chiarray.Chidict[l].Chikey[0].Text)
-						if key := dict[k].Chiarray.Chidict[l].Chikey[0].Text; key == "kSecTrustSettingsResult" {
-							if len(dict[k].Chiarray.Chidict) >= l+1 {
-								value := dict[k].Chiarray.Chidict[l].Chiinteger[0].Text
+					len(dict[k].Key) > 3 &&
+					dict[k].Key[3].Text == "trustSettings" {
+					for l := range dict[k].Array.Dict {
+						if key := dict[k].Array.Dict[l].Key[0].Text; key == "kSecTrustSettingsResult" {
+							if len(dict[k].Array.Dict) >= l+1 {
+								value := dict[k].Array.Dict[l].Integer[0].Text
 								fmt.Printf("%s = %v\n", key, value)
 							}
 						}
 
-						if len(dict[k].Chiarray.Chidict[l].Chikey) >= 3 {
-							if key := dict[k].Chiarray.Chidict[l].Chikey[2].Text; key == "kSecTrustSettingsPolicyName" {
-								if len(dict[k].Chiarray.Chidict) >= l+1 {
-									value := dict[k].Chiarray.Chidict[l].Chistring.Text
+						if len(dict[k].Array.Dict[l].Key) >= 3 {
+							if key := dict[k].Array.Dict[l].Key[2].Text; key == "kSecTrustSettingsPolicyName" {
+								if len(dict[k].Array.Dict) >= l+1 {
+									value := dict[k].Array.Dict[l].String.Text
 									fmt.Printf("%s = %v\n", key, value)
 								}
 							}
