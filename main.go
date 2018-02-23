@@ -5,9 +5,11 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -18,15 +20,29 @@ var (
 
 	nonContentRegex    = regexp.MustCompile(`[^a-zA-Z0-9\+\/=]*`)
 	whitespaceReplacer = strings.NewReplacer("\t", "", "\n", "", " ", "", "\r", "")
+
+	flagDirectory = flag.String("directory", "./examples/", "Directory of files to parse")
 )
 
 func main() {
-	bs, err := ioutil.ReadFile("after2")
+	fds, err := ioutil.ReadDir(*flagDirectory)
 	if err != nil {
 		panic(err)
 	}
 
-	// plist := ChiChidleyRoot314159{}
+	for i := range fds {
+		parse(filepath.Join(*flagDirectory, fds[i].Name()))
+	}
+}
+
+func parse(where string) {
+	fmt.Printf("parsing %s\n", where)
+
+	bs, err := ioutil.ReadFile(where)
+	if err != nil {
+		panic(err)
+	}
+
 	plist := Chiplist{}
 	err = xml.Unmarshal(bs, &plist)
 	if err != nil {
@@ -108,7 +124,9 @@ func main() {
 				// 	<integer>4</integer>
 				//     </dict>
 				// </array>
-				if dict[k].Chikey[3].Text == "trustSettings" {
+				if len(dict) > k &&
+					len(dict[k].Chikey) > 3 &&
+					dict[k].Chikey[3].Text == "trustSettings" {
 					for l := range dict[k].Chiarray.Chidict {
 						// fmt.Println(dict[k].Chiarray.Chidict[l].Chikey[0].Text)
 						if key := dict[k].Chiarray.Chidict[l].Chikey[0].Text; key == "kSecTrustSettingsResult" {
