@@ -29,46 +29,46 @@ var (
 // chidley -X after2 >> main.go
 
 type ChiChidleyRoot314159 struct {
-	Chiplist *Chiplist `xml:"plist,omitempty" json:"plist,omitempty"`   // ZZmaxLength=0
+	Chiplist *Chiplist `xml:"plist,omitempty" json:"plist,omitempty"`
 }
 
 type Chiplist struct {
-	Attrversion string`xml:"version,attr"  json:",omitempty"`  // maxLength=3
-	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`   // ZZmaxLength=0
+	Attrversion string`xml:"version,attr"  json:",omitempty"`
+	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`
 }
 
 type Chidict struct {
-	Chiarray *Chiarray `xml:"array,omitempty" json:"array,omitempty"`   // ZZmaxLength=0
-	Chidata []*Chidata `xml:"data,omitempty" json:"data,omitempty"`   // ZZmaxLength=0
-	Chidate *Chidate `xml:"date,omitempty" json:"date,omitempty"`   // ZZmaxLength=0
-	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`   // ZZmaxLength=0
-	Chiinteger []*Chiinteger `xml:"integer,omitempty" json:"integer,omitempty"`   // ZZmaxLength=0
-	Chikey []*Chikey `xml:"key,omitempty" json:"key,omitempty"`   // ZZmaxLength=0
-	Chistring *Chistring `xml:"string,omitempty" json:"string,omitempty"`   // ZZmaxLength=0
+	Chiarray *Chiarray `xml:"array,omitempty" json:"array,omitempty"`
+	Chidata []*Chidata `xml:"data,omitempty" json:"data,omitempty"`
+	Chidate *Chidate `xml:"date,omitempty" json:"date,omitempty"`
+	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`
+	Chiinteger []*Chiinteger `xml:"integer,omitempty" json:"integer,omitempty"`
+	Chikey []*Chikey `xml:"key,omitempty" json:"key,omitempty"`
+	Chistring *Chistring `xml:"string,omitempty" json:"string,omitempty"`
 }
 
 type Chikey struct {
-	Text string `xml:",chardata" json:",omitempty"`   // maxLength=40
+	Text string `xml:",chardata" json:",omitempty"`
 }
 
 type Chidata struct {
-	Text string `xml:",chardata" json:",omitempty"`   // maxLength=440
+	Text string `xml:",chardata" json:",omitempty"`
 }
 
 type Chidate struct {
-	Text string `xml:",chardata" json:",omitempty"`   // maxLength=20
+	Text string `xml:",chardata" json:",omitempty"`
 }
 
 type Chiarray struct {
-	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`   // ZZmaxLength=0
+	Chidict []*Chidict `xml:"dict,omitempty" json:"dict,omitempty"`
 }
 
 type Chiinteger struct {
-	Text string `xml:",chardata" json:",omitempty"`   // maxLength=11
+	Text string `xml:",chardata" json:",omitempty"`
 }
 
 type Chistring struct {
-	Text string `xml:",chardata" json:",omitempty"`   // maxLength=17
+	Text string `xml:",chardata" json:",omitempty"`
 }
 
 func main() {
@@ -182,18 +182,19 @@ func parse(where string) {
 								fmt.Printf("%s = %v\n", key, value)
 							}
 						}
+
+						if len(dict[k].Chiarray.Chidict[l].Chikey) >= 3 {
+							if key := dict[k].Chiarray.Chidict[l].Chikey[2].Text; key == "kSecTrustSettingsPolicyName" {
+								if len(dict[k].Chiarray.Chidict) >= l+1 {
+									value := dict[k].Chiarray.Chidict[l].Chistring.Text
+									fmt.Printf("%s = %v\n", key, value)
+								}
+							}
+						}
 					}
 				}
 
 				fmt.Printf("\n")
-
-				if k > 3 {
-					break // for debugging
-				}
-			}
-
-			if j > 3 {
-				break // for debuggging
 			}
 		}
 	}
