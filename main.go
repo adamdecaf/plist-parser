@@ -8,11 +8,9 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"math/big"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 )
 
 var (
@@ -76,14 +74,11 @@ func main() {
 type certTrust struct {
 	hash string
 
-	issuer *pkix.Name
-	modDate time.Time
-	serialNumber *big.Int
+	issuer *pkix.RDNSequence
 	trustSettings map[string]string
 }
 func (c *certTrust) String() string {
-	return fmt.Sprintf(`hash=%v issuer=%q modDate=%q serialNumber=%d
-  trustSettings=%#v`, c.hash[:8], c.issuer, c.modDate, c.serialNumber, c.trustSettings)
+	return fmt.Sprintf(`hash=%v issuer=%q trustSettings=%#v`, c.hash[:8], c.issuer, c.trustSettings)
 }
 
 func parse(where string) {
@@ -109,97 +104,85 @@ func parse(where string) {
 		hashes := plist.Dict[i].Dict[0].Key
 
 		for j := range plist.Dict[i].Dict {
-			dict := plist.Dict[i].Dict[j].Dict
-			for k := range dict {
+			for k := range plist.Dict[i].Dict[j].Dict {
+				dict := plist.Dict[i].Dict[j].Dict[k]
+
 				item := &certTrust{
 					hash: hashes[j].Text,
 					trustSettings: make(map[string]string, 0),
 				}
 				items = append(items, item)
 
-				// <key>issuerName</key>
-				// <data>
-				// MG8xCzAJBgNVBAYTAlNFMRQwEgYDVQQKEwtBZGRUcnVzdCBBQjEm
-				// MCQGA1UECxMdQWRkVHJ1c3QgRXh0ZXJuYWwgVFRQIE5ldHdvcmsx
-				// IjAgBgNVBAMTGUFkZFRydXN0IEV4dGVybmFsIENBIFJvb3Q=
-				// </data>
-				if dict[k].Key[0].Text == "issuerName" {
-					raw := whitespaceReplacer.Replace(nonContentRegex.ReplaceAllString(dict[k].Data[0].Text, ""))
-					data, _ := base64.StdEncoding.DecodeString(raw)
+				for l := range dict.Key {
+					switch dict.Key[l].Text {
 
-					// The issuerName's <data></data> block is only under asn1 encoding for the
-					// issuerName field from 4.1.2.4 (https://tools.ietf.org/rfc/rfc5280)
-					name := pkix.Name{}
-					var issuer pkix.RDNSequence
-					_, err := asn1.Unmarshal(data, &issuer)
-					if err == nil {
-						name.FillFromRDNSequence(&issuer)
-					}
-					// fmt.Printf("Issuer: %s\n", name)
-					item.issuer = &name
-				}
-
-				// <key>modDate</key>
-				// <date>2018-02-20T02:13:51Z</date>
-				if dict[k].Key[1].Text == "modDate" {
-					raw := dict[k].Date.Text // e.g. <date>2018-02-20T02:11:28Z</date>
-					t, err := time.ParseInLocation(plistModDateFormat, raw, time.UTC)
-					if err != nil {
-						panic(err)
-					}
-					// fmt.Printf("modDate: %v\n", t)
-					item.modDate = t
-				}
-
-				// <key>serialNumber</key>
-				// <data>
-				// AQ==
-				// </data>
-				if dict[k].Key[2].Text == "serialNumber" {
-					raw := whitespaceReplacer.Replace(nonContentRegex.ReplaceAllString(dict[k].Data[1].Text, ""))
-					data, _ := base64.StdEncoding.DecodeString(raw)
-
-					serial := big.NewInt(0)
-					serial.SetBytes(data)
-
-					// fmt.Printf("serialNumber: %v\n", serial)
-					item.serialNumber = serial
-				}
-
-				// <key>trustSettings</key>
-				// <array>
-				//     <dict>
-				// 	<key>kSecTrustSettingsResult</key>
-				// 	<integer>4</integer>
-				//     </dict>
-				// </array>
-				if len(dict) > k &&
-					len(dict[k].Key) > 3 &&
-					dict[k].Key[3].Text == "trustSettings" {
-					for l := range dict[k].Array.Dict {
-						if key := dict[k].Array.Dict[l].Key[0].Text; key == "kSecTrustSettingsResult" {
-							if len(dict[k].Array.Dict) >= l+1 {
-								value := dict[k].Array.Dict[l].Integer[0].Text
-								// fmt.Printf("%s = %v\n", key, value)
-								item.trustSettings[key] = value
-							}
+					case "issuerName":
+						issuer, err := parseIssuerName(dict.Data[0].Text)
+						if err != nil {
+							panic(err)
 						}
+						item.issuer = issuer
 
-						if len(dict[k].Array.Dict[l].Key) >= 3 {
-							if key := dict[k].Array.Dict[l].Key[2].Text; key == "kSecTrustSettingsPolicyName" {
-								if len(dict[k].Array.Dict) >= l+1 {
-									value := dict[k].Array.Dict[l].String.Text
-									// fmt.Printf("%s = %v\n", key, value)
-									item.trustSettings[key] = value
-								}
-							}
+					case "trustSettings":
+						err := parseTrustSettings(item, dict)
+						if err != nil {
+							panic(err)
 						}
 					}
 				}
-
 				fmt.Printf("%s\n\n", item.String())
 			}
 		}
 	}
 	fmt.Printf("found %d items\n", len(items))
+}
+
+// <key>issuerName</key>
+// <data>
+// MG8xCzAJBgNVBAYTAlNFMRQwEgYDVQQKEwtBZGRUcnVzdCBBQjEm
+// MCQGA1UECxMdQWRkVHJ1c3QgRXh0ZXJuYWwgVFRQIE5ldHdvcmsx
+// IjAgBgNVBAMTGUFkZFRydXN0IEV4dGVybmFsIENBIFJvb3Q=
+// </data>
+func parseIssuerName(value string) (*pkix.RDNSequence, error) {
+	raw := whitespaceReplacer.Replace(nonContentRegex.ReplaceAllString(value, ""))
+	data, _ := base64.StdEncoding.DecodeString(raw)
+
+	// The issuerName's <data></data> block is only under asn1 encoding for the
+	// issuerName field from 4.1.2.4 (https://tools.ietf.org/rfc/rfc5280)
+	name := pkix.Name{}
+	var issuer pkix.RDNSequence
+	_, err := asn1.Unmarshal(data, &issuer)
+	if err == nil {
+		name.FillFromRDNSequence(&issuer)
+	}
+	return &issuer, err
+}
+
+// <key>trustSettings</key>
+// <array>
+//     <dict>
+// 	<key>kSecTrustSettingsResult</key>
+// 	<integer>4</integer>
+//     </dict>
+// </array>
+func parseTrustSettings(item *certTrust, dict *Dict) error {
+	for l := range dict.Array.Dict {
+		for m := range dict.Array.Dict[l].Key {
+			key := dict.Array.Dict[l].Key[m].Text
+			switch key {
+			case "kSecTrustSettingsResult":
+				if len(dict.Array.Dict) >= l+1 {
+					value := dict.Array.Dict[l].Integer[0].Text
+					item.trustSettings[key] = value
+				}
+
+			case "kSecTrustSettingsPolicyName":
+				if len(dict.Array.Dict) >= l+1 {
+					value := dict.Array.Dict[l].String.Text
+					item.trustSettings[key] = value
+				}
+			}
+		}
+	}
+	return nil
 }
