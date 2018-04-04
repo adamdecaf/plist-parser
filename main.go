@@ -108,7 +108,7 @@ func parse(where string) {
 				dict := plist.Dict[i].Dict[j].Dict[k]
 
 				item := &certTrust{
-					hash: hashes[j].Text,
+					hash: hashes[k].Text,
 					trustSettings: make(map[string]string, 0),
 				}
 				items = append(items, item)
